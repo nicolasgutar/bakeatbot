@@ -2,8 +2,8 @@ import logging
 from flask import current_app, jsonify
 import json
 import requests
-
-# from app.services.openai_service import generate_response
+from app.services.openai_service import generate_response
+from app.utils.audio_processing import process_audio
 import re
 
 
@@ -23,12 +23,6 @@ def get_text_message_input(recipient, text):
             "text": {"preview_url": False, "body": text},
         }
     )
-
-
-def generate_response(response):
-    # Return text in uppercase
-    return response.upper()
-
 
 def send_message(data):
     headers = {
@@ -80,17 +74,54 @@ def process_whatsapp_message(body):
     name = body["entry"][0]["changes"][0]["value"]["contacts"][0]["profile"]["name"]
 
     message = body["entry"][0]["changes"][0]["value"]["messages"][0]
-    message_body = message["text"]["body"]
 
-    # TODO: implement custom function here
-    response = generate_response(message_body)
+    message_body = process_message_by_type(message)
+
+    logging.info("message_body: " + message_body)
 
     # OpenAI Integration
-    # response = generate_response(message_body, wa_id, name)
-    # response = process_text_for_whatsapp(response)
-
+    response = generate_response(message_body, wa_id, name)
+    response = process_text_for_whatsapp(response)
     data = get_text_message_input(current_app.config["RECIPIENT_WAID"], response)
     send_message(data)
+
+
+def process_message_by_type(message):
+    """
+    Check the message type and call the appropriate processing function.
+    Returns text that should be sent back to the user.
+    """
+    message_type = message.get("type")
+
+    if message_type == "text":
+        return process_text(message)
+    elif message_type == "audio":
+        return process_audio(message)
+    elif message_type == "image":
+        return process_image()
+    else:
+        return "Unsupported message type."
+
+
+def process_text(message):
+    """
+    Handles text messages:
+    - Extract user text
+    - Generate response via OpenAI
+    - Format the text for WhatsApp
+    - Return text to be sent
+    """
+    message_body = message["text"]["body"]
+
+    return message_body
+
+
+def process_image():
+    """
+    Temporarily returns a placeholder.
+    In the future, you can add image processing logic here.
+    """
+    return "User sent an image. Let it know that you can't process Images."
 
 
 def is_valid_whatsapp_message(body):
